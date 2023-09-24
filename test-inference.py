@@ -1,0 +1,50 @@
+import io
+import cv2
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from keras.models import load_model
+
+tf.config.set_visible_devices([], 'GPU')
+classes = ['AMD', 'Cataract', 'Diabet', 'Glaucoma', 'Hypertension', 'Myopia', 'Normal', 'Other']
+# print(classes)
+model = load_model('weights/model.h5', compile=False)
+
+filename = '1167_right.jpg'
+
+def image_resize(image_path, dim):
+  img = cv2.imread(image_path)
+  if img.shape[1] != img.shape[0]:
+    x = img.shape[1]//2
+    y = img.shape[0]//2
+    x = x-y
+    img = img[0:0+img.shape[0], x:x+img.shape[0]]
+  # resize image
+  return cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
+
+def CLAHE(image_path, dim, clipLimit, tileGridSize):
+  img = image_resize(image_path, dim)
+  clahe = cv2.createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
+  lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)  # convert from BGR to LAB color space
+  l, a, b = cv2.split(lab)  # split on 3 different channels
+  l2 = clahe.apply(l)  # apply CLAHE to the L-channel
+  lab = cv2.merge((l2,a,b))  # merge channels
+  img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)  # convert from LAB to BGR
+  img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+  return img
+
+# Read and prepare image
+img = CLAHE(filename, (230, 230), 20, (10,10))
+imgarray = tf.keras.preprocessing.image.img_to_array(img)
+imgarray = np.expand_dims(imgarray, axis=0)
+images = np.vstack([imgarray])/255
+print(f'{images.shape} -------------------'),
+
+
+# Generate prediction
+prediction = (model.predict(images) > 0.5).astype('float')
+prediction = pd.Series(prediction[0])
+prediction.index = classes
+prediction = prediction[prediction==1].index.values
+
+print(prediction)
